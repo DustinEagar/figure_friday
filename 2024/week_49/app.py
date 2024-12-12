@@ -46,6 +46,17 @@ print(daily_agg.head())
 with open('./figure_friday/2024/week_49/data/new_england_geojson.json') as f:
     geojson = json.load(f)
 
+# Define a color map for the regions
+region_colors = {
+    "Connecticut": "#1f77b4",
+    "Maine": "#ff7f0e",
+    "New Hampshire": "#2ca02c",
+    "Northeast Massachusetts": "#d62728",
+    "Rhode Island": "#9467bd",
+    "Southeast Massachusetts": "#8c564b",
+    "Vermont": "#e377c2",
+    "Western/Central Massachusetts": "#7f7f7f"
+}
 # Create initial figures
 latest_time = df_melted['timestamp'].max()
 df_latest = df_melted[df_melted['timestamp'] == latest_time]
@@ -75,7 +86,8 @@ fig_line_all = px.line(
     color='region',
     title='Load Over Time',
     labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
-    template='plotly_dark'
+    template='plotly_dark',
+    color_discrete_map=region_colors
 )
 fig_line_all.update_layout(hovermode="x unified")
 
@@ -142,7 +154,8 @@ def update_charts(clickData):
         dff, x='timestamp', y='load_mw', color='region',
         title=f'Load Over Time: {clicked_region}',
         labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
-        template='plotly_dark'
+        template='plotly_dark',
+        color_discrete_map=region_colors
     )
     fig_line.update_layout(hovermode="x unified")
     
