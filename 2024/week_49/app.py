@@ -62,7 +62,7 @@ fig_map = px.choropleth_mapbox(
     df_latest,
     geojson=geojson,
     locations='region',
-    featureidkey='properties.name',
+    featureidkey='properties.NAME',
     color='load_mw',
     color_continuous_scale="Viridis",
     mapbox_style="carto-positron",
