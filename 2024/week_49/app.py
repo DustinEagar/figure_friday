@@ -2,19 +2,15 @@ import json
 import dash
 from dash import dcc, html, Input, Output
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 
 # -----------------------------------------
-# Step 1: Load and Transform Your Data
+# Load and Prepare Data
 # -----------------------------------------
 df = pd.read_csv("./figure_friday/2024/week_49/data/megawatt_demand_2024.csv")  # Replace with your actual filename
-
-# Parse timestamps
-# The primary time column could be "UTC Timestamp (Interval Ending)" or the local one.
-# We'll choose UTC for consistency.
 df['timestamp'] = pd.to_datetime(df['UTC Timestamp (Interval Ending)'])
 
-# Columns of interest for load data:
 load_columns = [
     "Connecticut Actual Load (MW)",
     "Maine Actual Load (MW)",
@@ -26,8 +22,6 @@ load_columns = [
     "Western/Central Massachusetts Actual Load (MW)"
 ]
 
-# Melt the dataframe from wide to long format
-# We will have a 'region' column and a 'load_mw' column
 df_melted = df.melt(
     id_vars=['timestamp'],
     value_vars=load_columns,
@@ -35,31 +29,31 @@ df_melted = df.melt(
     value_name='load_mw'
 )
 
-# Clean up region names by removing " Actual Load (MW)"
+# Clean region names
 df_melted['region'] = df_melted['region'].str.replace(' Actual Load \(MW\)', '', regex=True)
 
-# Now the region column should look like:
-# "Connecticut", "Maine", "New Hampshire", "Northeast Massachusetts",
-# "Rhode Island", "Southeast Massachusetts", "Vermont", "Western/Central Massachusetts"
+# Compute daily aggregates
+df_melted['date'] = df_melted['timestamp'].dt.date
+daily_agg = df_melted.groupby(['region', 'date']).agg(
+    daily_avg=('load_mw', 'mean'),
+    daily_min=('load_mw', 'min'),
+    daily_max=('load_mw', 'max')
+).reset_index()
 
-# Confirm the unique regions
-print(df_melted['region'].unique())
-
-# -----------------------------------------
-# Step 2: Load GeoJSON
-# -----------------------------------------
-with open("./figure_friday/2024/week_49/data/new_england_geojson.json") as f:
+print(df_melted.head())
+print(daily_agg.head())
+# Load GeoJSON
+with open('./figure_friday/2024/week_49/data/new_england_geojson.json') as f:
     geojson = json.load(f)
 
-# -----------------------------------------
-# Step 3: Create the Initial Figures
-# -----------------------------------------
-# For the initial map, let's pick the latest timestamp in the data
+# Create initial figures
 latest_time = df_melted['timestamp'].max()
 df_latest = df_melted[df_melted['timestamp'] == latest_time]
+df_avg = df_melted.groupby('region').mean().reset_index()
+print(df_avg.head())
 
 fig_map = px.choropleth_mapbox(
-    df_latest,
+    df_avg,
     geojson=geojson,
     locations='region',
     featureidkey='properties.NAME',
@@ -67,64 +61,114 @@ fig_map = px.choropleth_mapbox(
     color_continuous_scale="Viridis",
     mapbox_style="carto-positron",
     zoom=5,
-    center={"lat": 43.5, "lon": -71.5},  # Approximate center of New England
+    center={"lat": 43.5, "lon": -71.5},  # Approx center of New England
     opacity=0.7,
     hover_name='region'
 )
-fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, template='plotly_dark')
 
-fig_line = px.line(
+# Initial line plot: all regions
+fig_line_all = px.line(
     df_melted,
-    x='timestamp', y='load_mw', color='region',
+    x='timestamp',
+    y='load_mw',
+    color='region',
     title='Load Over Time',
-    labels={'load_mw':'Load (MW)', 'timestamp':'Time'}
+    labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
+    template='plotly_dark'
 )
-fig_line.update_layout(hovermode="x unified")
+fig_line_all.update_layout(hovermode="x unified")
+
+# Initial daily aggregates plot (blank or show all)
+# We'll start with no selection - show all regions aggregated (optional)
+fig_daily = go.Figure(layout={"template":"plotly_dark"})
+fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title="Date", yaxis_title="Load (MW)")
 
 # -----------------------------------------
-# Step 4: Build the Dash App
+# Dash App
 # -----------------------------------------
 app = dash.Dash(__name__)
 
-app.layout = html.Div([
-    html.H1("New England Electricity Usage"),
-    html.Div([
+app.layout = html.Div(
+    style={"backgroundColor": "#333", "color": "#fff", "padding": "20px"},  # Dark background
+    children=[
+        html.H1("New England Electricity Usage", style={"textAlign": "center"}),
         html.Div([
-            dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
-        ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
-
-        html.Div([
-            dcc.Graph(id='timeseries', figure=fig_line, style={"height": "60vh"})
-        ], style={"width": "58%", "display": "inline-block", "padding-left":"2%", "vertical-align": "top"}),
-    ])
-])
+            html.Div([
+                dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
+            ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
+            
+            html.Div([
+                dcc.Graph(id='timeseries', figure=fig_line_all, style={"height": "60vh"}),
+                dcc.Graph(id='daily_timeseries', figure=fig_daily, style={"height": "60vh", "marginTop":"20px"})
+            ], style={"width": "58%", "display": "inline-block", "padding-left":"2%", "vertical-align": "top"})
+        ])
+    ]
+)
 
 @app.callback(
-    Output('timeseries', 'figure'),
+    [Output('timeseries', 'figure'),
+     Output('daily_timeseries', 'figure')],
     Input('map', 'clickData')
 )
-def update_line_chart(clickData):
+def update_charts(clickData):
     # If no region clicked, show all
     if clickData is None:
-        fig = px.line(
-            df_melted, x='timestamp', y='load_mw', color='region',
-            title='Load Over Time', labels={'load_mw':'Load (MW)', 'timestamp':'Time'}
+        # All regions time series
+        fig_line = px.line(
+            df_melted,
+            x='timestamp', y='load_mw', color='region',
+            title='Load Over Time', labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
+            template='plotly_dark'
         )
-        fig.update_layout(hovermode="x unified")
-        return fig
+        fig_line.update_layout(hovermode="x unified")
+        
+        # Daily aggregates for all regions (optional): could just show empty
+        fig_daily = go.Figure(layout={"template":"plotly_dark"})
+        fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title="Date", yaxis_title="Load (MW)")
+        return fig_line, fig_daily
 
-    # Extract the clicked region
+    # Extract clicked region
     clicked_region = clickData['points'][0]['location']
 
-    # Filter df for that region
+    # Filter data for the selected region
     dff = df_melted[df_melted['region'] == clicked_region]
-    fig = px.line(
+    dff_daily = daily_agg[daily_agg['region'] == clicked_region]
+    
+    # Main time series for the selected region
+    fig_line = px.line(
         dff, x='timestamp', y='load_mw', color='region',
         title=f'Load Over Time: {clicked_region}',
-        labels={'load_mw':'Load (MW)', 'timestamp':'Time'}
+        labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
+        template='plotly_dark'
     )
-    fig.update_layout(hovermode="x unified")
-    return fig
+    fig_line.update_layout(hovermode="x unified")
+    
+    # Daily aggregates: avg line, fill between min and max
+    fig_daily = go.Figure(layout={"template":"plotly_dark"})
+    fig_daily.add_trace(go.Scatter(
+        x=dff_daily['date'], y=dff_daily['daily_max'],
+        fill=None, mode='lines', line_color='rgba(200,50,50,0.5)',
+        name='Daily Max'
+    ))
+    fig_daily.add_trace(go.Scatter(
+        x=dff_daily['date'], y=dff_daily['daily_min'],
+        fill='tonexty', mode='lines', line_color='rgba(50,50,200,0.5)',
+        name='Daily Min'
+    ))
+    fig_daily.add_trace(go.Scatter(
+        x=dff_daily['date'], y=dff_daily['daily_avg'],
+        mode='lines', line_color='white', name='Daily Avg'
+    ))
+
+    fig_daily.update_layout(
+        title=f"Daily Aggregate Load: {clicked_region}",
+        xaxis_title="Date",
+        yaxis_title="Load (MW)",
+        hovermode="x unified"
+    )
+
+    return fig_line, fig_daily
 
 if __name__ == '__main__':
     app.run_server(debug=True)
