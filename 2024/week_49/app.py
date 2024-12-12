@@ -95,6 +95,8 @@ app.layout = html.Div(
         html.H1("New England Electricity Usage", style={"textAlign": "center"}),
         html.Div([
             html.Div([
+                    html.H4('Average Load by ISO-NE Region'),
+                    html.P("Click to filter by region"),
                 dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
             ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
             
