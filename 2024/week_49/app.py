@@ -48,7 +48,7 @@ print(df_melted['region'].unique())
 # -----------------------------------------
 # Step 2: Load GeoJSON
 # -----------------------------------------
-with open("./figure_friday/2024/week_49/data/iso_ne_geojson.json") as f:
+with open("./figure_friday/2024/week_49/data/new_england_geojson.json") as f:
     geojson = json.load(f)
 
 # -----------------------------------------
