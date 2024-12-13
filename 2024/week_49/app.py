@@ -79,6 +79,9 @@ df_latest = df_melted[df_melted['timestamp'] == latest_time]
 df_avg = df_melted.groupby('region').mean().reset_index()
 print(df_avg.head())
 
+# Create a weekly-peak load by region chart for before clickthrough
+df_melted['week'] = df_melted['timestamp'].dt.to_period('W').apply(lambda r: r.start_time)
+
 fig_map = px.choropleth_mapbox(
     df_avg,
     geojson=geojson,
@@ -120,7 +123,7 @@ app = dash.Dash(__name__)
 app.layout = html.Div(
     style={"backgroundColor": "#333", "color": "#fff", "padding": "20px"},  # Dark background
     children=[
-        html.H1("New England Electricity Usage", style={"textAlign": "center"}),
+        html.H1("ISO-New England Grid Loading, 2024", style={"textAlign": "center"}),
         html.Div([
             html.Div([
                     html.H4('Average Load by ISO-NE Region'),
@@ -137,7 +140,7 @@ app.layout = html.Div(
                     id='date-range-slider',
                     min=0,
                     max=len(unique_dates)-1,
-                    value=[start_idx, end_idx],
+                    value=[275, 306], #Month of Oct.
                     marks=date_marks,
                     step=1,
                     tooltip=None
@@ -164,6 +167,11 @@ def update_charts(clickData, slider_value):
     df_line = df_melted[(df_melted['date'] >= start_date) & (df_melted['date'] <= end_date)]
     df_line_daily = daily_agg[(daily_agg['date'] >= start_date) & (daily_agg['date'] <= end_date)]
 
+    #Weekly max
+    weekly_max = df_melted[
+        (df_melted['date'] >= start_date) & (df_melted['date'] <= end_date)
+    ].groupby(['region', 'week']).agg(weekly_max=('load_mw', 'max')).reset_index()
+
     if clickData is None:
         # No region clicked: show all regions
         fig_map = px.choropleth_mapbox(
@@ -189,11 +197,29 @@ def update_charts(clickData, slider_value):
             color_discrete_map=region_colors
         )
         fig_line.update_layout(hovermode="x unified")
+        
+        fig_weekly_max = go.Figure(layout={"template":"plotly_dark"})
+        fig_weekly_max.update_layout(
+            title="Weekly Max Load by Region",
+            xaxis_title="Week",
+            yaxis_title="Load (MW)",
+            hovermode="x unified"
+        )
 
-        fig_daily = go.Figure(layout={"template":"plotly_dark"})
-        fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title="Date", yaxis_title="Load (MW)")
+        for region in weekly_max['region'].unique():
+            dff = weekly_max[weekly_max['region'] == region]
+            region_color = region_colors.get(region, "white")
+            fig_weekly_max.add_trace(
+                go.Scatter(
+                    x=dff['week'], y=dff['weekly_max'],
+                    mode='lines+markers',
+                    line=dict(color=region_color, width=2),
+                    marker=dict(color=region_color, size=6),
+                    name=f"{region} Weekly Max"
+                )
+            )
 
-        return fig_map, fig_line, fig_daily
+        return fig_map, fig_line, fig_weekly_max
 
     # Region clicked
     clicked_region = clickData['points'][0]['location']
@@ -244,7 +270,7 @@ def update_charts(clickData, slider_value):
         ))
 
     fig_daily.update_layout(
-        title=f"Daily Aggregate Load: {clicked_region}",
+        title=f"Daily Load Summary: {clicked_region}",
         xaxis_title="Date",
         yaxis_title="Load (MW)",
         hovermode="x unified"
