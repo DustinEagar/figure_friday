@@ -111,9 +111,9 @@ fig_line_all = px.line(
 fig_line_all.update_layout(hovermode="x unified")
 
 # Initial daily aggregates plot (blank or show all)
-# We'll start with no selection - show all regions aggregated (optional)
+# Initialize daily load figure
 fig_daily = go.Figure(layout={"template":"plotly_dark"})
-fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title="Date", yaxis_title="Load (MW)")
+fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title=None, yaxis_title="Load (MW)")
 
 # -----------------------------------------
 # Dash App
@@ -126,26 +126,41 @@ app.layout = html.Div(
         html.H1("ISO-New England Grid Loading, 2024", style={"textAlign": "center"}),
         html.Div([
             html.Div([
-                    html.H4('Average Load by ISO-NE Region'),
-                    html.P("Click to filter by region"),
-                dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
+                html.H4('Average Load by ISO-NE Region'),
+                html.P("Click to filter by region"),
+                dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"}),
+                
+                #Markdown descriptor
+                dcc.Markdown(
+                    """
+                    **ISO-New England Load by Region:**
+                    This dashboard provides an interactive visualization of electricity 
+                    usage across New England states and Massachusetts sub-regions. 
+                    Use the date range slider and map to filter and explore trends in grid demand over time.
+
+                    [Data from ISO-NE](https://www.eia.gov/electricity/wholesalemarkets/isone.php)
+                    """,
+                    style={"margin-top": "20px", "height": "30vh", "overflowY": "auto"}
+                )
             ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
+
             html.Div([
                 dcc.Graph(id='timeseries', figure=fig_line_all, style={"height": "60vh"}),
                 dcc.Graph(id='daily_timeseries', figure=fig_daily, style={"height": "60vh", "marginTop":"20px"})
             ], style={"width": "58%", "display": "inline-block", "padding-left":"2%", "vertical-align": "top"})
         ]),
-                    html.Div([
-                dcc.RangeSlider(
-                    id='date-range-slider',
-                    min=0,
-                    max=len(unique_dates)-1,
-                    value=[275, 306], #Month of Oct.
-                    marks=date_marks,
-                    step=1,
-                    tooltip=None
-                ),
-            ], style={"margin-bottom":"20px"})
+
+        html.Div([
+            dcc.RangeSlider(
+                id='date-range-slider',
+                min=0,
+                max=len(unique_dates)-1,
+                value=[275, 306], #Month of Oct.
+                marks=date_marks,
+                step=1,
+                tooltip=None
+            ),
+        ], style={"margin-bottom":"20px"})
     ]
 )
 
@@ -196,12 +211,12 @@ def update_charts(clickData, slider_value):
             template='plotly_dark',
             color_discrete_map=region_colors
         )
-        fig_line.update_layout(hovermode="x unified")
+        fig_line.update_layout(hovermode="x unified", xaxis_title=None)
         
         fig_weekly_max = go.Figure(layout={"template":"plotly_dark"})
         fig_weekly_max.update_layout(
             title="Weekly Max Load by Region",
-            xaxis_title="Week",
+            xaxis_title=None,
             yaxis_title="Load (MW)",
             hovermode="x unified"
         )
