@@ -128,6 +128,11 @@ app.layout = html.Div(
                 dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
             ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
             html.Div([
+                dcc.Graph(id='timeseries', figure=fig_line_all, style={"height": "60vh"}),
+                dcc.Graph(id='daily_timeseries', figure=fig_daily, style={"height": "60vh", "marginTop":"20px"})
+            ], style={"width": "58%", "display": "inline-block", "padding-left":"2%", "vertical-align": "top"})
+        ]),
+                    html.Div([
                 dcc.RangeSlider(
                     id='date-range-slider',
                     min=0,
@@ -135,14 +140,9 @@ app.layout = html.Div(
                     value=[start_idx, end_idx],
                     marks=date_marks,
                     step=1,
-                    tooltip={"placement": "bottom", "always_visible": True}
+                    tooltip=None
                 ),
-            ], style={"margin-bottom":"20px"}),
-            html.Div([
-                dcc.Graph(id='timeseries', figure=fig_line_all, style={"height": "60vh"}),
-                dcc.Graph(id='daily_timeseries', figure=fig_daily, style={"height": "60vh", "marginTop":"20px"})
-            ], style={"width": "58%", "display": "inline-block", "padding-left":"2%", "vertical-align": "top"})
-        ])
+            ], style={"margin-bottom":"20px"})
     ]
 )
 
