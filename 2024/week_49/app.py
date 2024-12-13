@@ -57,6 +57,22 @@ region_colors = {
     "Vermont": "#e377c2",
     "Western/Central Massachusetts": "#7f7f7f"
 }
+
+# Get unique dates for slider (daily granularity)
+unique_dates = sorted(daily_agg['date'].unique())
+
+# Identify month start dates
+month_starts = [(i, d) for i, d in enumerate(unique_dates) if d.day == 1]
+
+# Create marks only for the first of each month
+date_marks = {i: d.strftime("%Y-%m-%d") for i, d in month_starts}
+
+# Initial state: use the full range of dates
+start_idx = 0
+end_idx = len(unique_dates) - 1
+start_date = unique_dates[start_idx]
+end_date = unique_dates[end_idx]
+
 # Create initial figures
 latest_time = df_melted['timestamp'].max()
 df_latest = df_melted[df_melted['timestamp'] == latest_time]
@@ -111,7 +127,17 @@ app.layout = html.Div(
                     html.P("Click to filter by region"),
                 dcc.Graph(id='map', figure=fig_map, style={"height": "60vh"})
             ], style={"width": "40%", "display": "inline-block", "vertical-align": "top"}),
-            
+            html.Div([
+                dcc.RangeSlider(
+                    id='date-range-slider',
+                    min=0,
+                    max=len(unique_dates)-1,
+                    value=[start_idx, end_idx],
+                    marks=date_marks,
+                    step=1,
+                    tooltip={"placement": "bottom", "always_visible": True}
+                ),
+            ], style={"margin-bottom":"20px"}),
             html.Div([
                 dcc.Graph(id='timeseries', figure=fig_line_all, style={"height": "60vh"}),
                 dcc.Graph(id='daily_timeseries', figure=fig_daily, style={"height": "60vh", "marginTop":"20px"})
@@ -121,60 +147,101 @@ app.layout = html.Div(
 )
 
 @app.callback(
-    [Output('timeseries', 'figure'),
+    [Output('map', 'figure'),
+     Output('timeseries', 'figure'),
      Output('daily_timeseries', 'figure')],
-    Input('map', 'clickData')
+    [Input('map', 'clickData'),
+     Input('date-range-slider', 'value')]
 )
-def update_charts(clickData):
-    # If no region clicked, show all
+def update_charts(clickData, slider_value):
+    start_idx, end_idx = slider_value
+    start_date = unique_dates[start_idx]
+    end_date = unique_dates[end_idx]
+
+    df_map_day = df_melted[(df_melted['date'] >= start_date) & (df_melted['date'] <= end_date)].groupby(
+        'region'
+    ).mean().reset_index()
+    df_line = df_melted[(df_melted['date'] >= start_date) & (df_melted['date'] <= end_date)]
+    df_line_daily = daily_agg[(daily_agg['date'] >= start_date) & (daily_agg['date'] <= end_date)]
+
     if clickData is None:
-        # All regions time series
+        # No region clicked: show all regions
+        fig_map = px.choropleth_mapbox(
+            df_map_day,
+            geojson=geojson,
+            locations='region',
+            featureidkey='properties.NAME',
+            color='load_mw',
+            color_continuous_scale="Viridis",
+            mapbox_style="carto-positron",
+            zoom=5,
+            center={"lat": 43.5, "lon": -71.5},
+            opacity=0.7,
+            hover_name='region'
+        )
+        fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, template='plotly_dark')
+
         fig_line = px.line(
-            df_melted,
-            x='timestamp', y='load_mw', color='region',
-            title='Load Over Time', labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
-            template='plotly_dark'
+            df_line, x='timestamp', y='load_mw', color='region',
+            title='Load Over Time (Selected Date Range)',
+            labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
+            template='plotly_dark',
+            color_discrete_map=region_colors
         )
         fig_line.update_layout(hovermode="x unified")
-        
-        # Daily aggregates for all regions (optional): could just show empty
+
         fig_daily = go.Figure(layout={"template":"plotly_dark"})
         fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title="Date", yaxis_title="Load (MW)")
-        return fig_line, fig_daily
 
-    # Extract clicked region
+        return fig_map, fig_line, fig_daily
+
+    # Region clicked
     clicked_region = clickData['points'][0]['location']
+    dff = df_line[df_line['region'] == clicked_region]
+    dff_daily = df_line_daily[df_line_daily['region'] == clicked_region]
 
-    # Filter data for the selected region
-    dff = df_melted[df_melted['region'] == clicked_region]
-    dff_daily = daily_agg[daily_agg['region'] == clicked_region]
-    
-    # Main time series for the selected region
+    fig_map = px.choropleth_mapbox(
+        df_map_day,
+        geojson=geojson,
+        locations='region',
+        featureidkey='properties.NAME',
+        color='load_mw',
+        color_continuous_scale="Viridis",
+        mapbox_style="carto-positron",
+        zoom=5,
+        center={"lat": 43.5, "lon": -71.5},
+        opacity=0.7,
+        hover_name='region'
+    )
+    fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, template='plotly_dark')
+
     fig_line = px.line(
         dff, x='timestamp', y='load_mw', color='region',
-        title=f'Load Over Time: {clicked_region}',
+        title=f'Load Over Time: {clicked_region} ({start_date} to {end_date})',
         labels={'load_mw':'Load (MW)', 'timestamp':'Time'},
         template='plotly_dark',
         color_discrete_map=region_colors
     )
     fig_line.update_layout(hovermode="x unified")
-    
-    # Daily aggregates: avg line, fill between min and max
+
     fig_daily = go.Figure(layout={"template":"plotly_dark"})
-    fig_daily.add_trace(go.Scatter(
-        x=dff_daily['date'], y=dff_daily['daily_max'],
-        fill=None, mode='lines', line_color='rgba(200,50,50,0.5)',
-        name='Daily Max'
-    ))
-    fig_daily.add_trace(go.Scatter(
-        x=dff_daily['date'], y=dff_daily['daily_min'],
-        fill='tonexty', mode='lines', line_color='rgba(50,50,200,0.5)',
-        name='Daily Min'
-    ))
-    fig_daily.add_trace(go.Scatter(
-        x=dff_daily['date'], y=dff_daily['daily_avg'],
-        mode='lines', line_color='white', name='Daily Avg'
-    ))
+    region_color = region_colors.get(clicked_region, "white")
+
+    if not dff_daily.empty:
+        fig_daily.add_trace(go.Scatter(
+            x=dff_daily['date'], y=dff_daily['daily_max'],
+            mode='lines', line_color=region_color,
+            name='Daily Max'
+        ))
+        fig_daily.add_trace(go.Scatter(
+            x=dff_daily['date'], y=dff_daily['daily_min'],
+            fill='tonexty', mode='lines', line_color=region_color,
+            name='Daily Min'
+        ))
+        fig_daily.add_trace(go.Scatter(
+            x=dff_daily['date'], y=dff_daily['daily_avg'],
+            mode='lines+markers', line_color='white', name='Daily Avg'
+        ))
 
     fig_daily.update_layout(
         title=f"Daily Aggregate Load: {clicked_region}",
@@ -183,7 +250,7 @@ def update_charts(clickData):
         hovermode="x unified"
     )
 
-    return fig_line, fig_daily
+    return fig_map, fig_line, fig_daily
 
 if __name__ == '__main__':
     app.run_server(debug=True)
