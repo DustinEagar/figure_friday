@@ -8,7 +8,7 @@ import pandas as pd
 # -----------------------------------------
 # Load and Prepare Data
 # -----------------------------------------
-df = pd.read_csv("./figure_friday/2024/week_49/data/megawatt_demand_2024.csv")  # Replace with your actual filename
+df = pd.read_csv("./data/megawatt_demand_2024.csv")  # Replace with your actual filename
 df['timestamp'] = pd.to_datetime(df['UTC Timestamp (Interval Ending)'])
 
 load_columns = [
@@ -43,7 +43,7 @@ daily_agg = df_melted.groupby(['region', 'date']).agg(
 print(df_melted.head())
 print(daily_agg.head())
 # Load GeoJSON
-with open('./figure_friday/2024/week_49/data/new_england_geojson.json') as f:
+with open('./data/new_england_geojson.json') as f:
     geojson = json.load(f)
 
 # Define a color map for the regions
@@ -294,4 +294,4 @@ def update_charts(clickData, slider_value):
     return fig_map, fig_line, fig_daily
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(host='0.0.0.0', port=8050, debug=False)
