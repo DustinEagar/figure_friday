@@ -120,6 +120,9 @@ fig_daily.update_layout(title="Daily Aggregate Load", xaxis_title=None, yaxis_ti
 # -----------------------------------------
 app = dash.Dash(__name__)
 
+# Expose the Flask server instance
+server = app.server
+
 app.layout = html.Div(
     style={"backgroundColor": "#333", "color": "#fff", "padding": "20px"},  # Dark background
     children=[
